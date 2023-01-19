@@ -2,7 +2,7 @@
 compile with:
     g++ -pthread -o integrate main.cpp
 run with:
-    integrate a b n_samples n_threads
+    ./integrate a b n_samples n_threads
 output:
     result, time taken
 */
@@ -20,7 +20,6 @@ using namespace std;
 const int N = 1000; // Number of samples
 const int T = 10;   // Number of threads
 
-double a, b;       // Integral limits
 double result;     // Result of the integral calculation
 pthread_mutex_t mutex; // Mutex to protect the shared result variable
 
@@ -50,16 +49,23 @@ void* integrate(void* id) {
     return 0;
 }
 
-int main(int a, char** args) {
-    // cout << a << endl;
-    // cout << args[1] << endl;
+int main(int num_args, char** args) {
+
+    if (num_args != 5){
+        cout << "Wrong number of arguments" << endl;
+        return 0;
+    }
+
+    // Set the integral limits
+    double a = stod(args[1]);
+    double b = stod(args[2]);
+    int num_samples = stoi(args[3]);
+    int num_threads = stoi(args[4]);
+
 
     // Initialize the mutex
     pthread_mutex_init(&mutex, NULL);
 
-    // Set the integral limits
-    a = 0;
-    b = 1;
 
     // Initialize the Gaussian quadrature weights and points
     // TODO: Is this the correct method? wiki looks more complicated

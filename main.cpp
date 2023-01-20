@@ -68,7 +68,7 @@ int main(int num_args, char** args) {
     int num_samples = stoi(args[3]);
     int num_threads = stoi(args[4]);
 
-    double result;     // Result of the integral calculation
+    double result = 0;     // Result of the integral calculation
     double x[num_samples];
     double w[num_samples];
 

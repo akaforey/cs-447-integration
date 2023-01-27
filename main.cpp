@@ -14,6 +14,10 @@ run with:
     ./integrate a b n_samples n_threads
 output:
     result, time taken
+
+
+integral_0^1 sin(x)/x dx | 18 digits 
+= 0.946083070367183015
 */
 
 // TODO Time calculation
@@ -28,7 +32,7 @@ struct parameters{
     // Gaussian quadrature weights and points
     vector<double> x;
     vector<double> w;
-    double* result;
+    vector<double>* result;
 };
 
 
@@ -37,7 +41,15 @@ double f(double x) {
     return sin(x)/x;
 }
 
-// double average(const std::vector<double>& values) {
+double sum(vector<double>& values){
+    double sum = 0;
+    for (ulong i=0; i < values.size(); i++){
+        sum += values[i];
+    }
+    return sum;
+}
+
+// double average(const vector<double>& values) {
 //     double sum = 0.0;
 //     double error = 0.0;
 //     for (double value : values) {
@@ -49,7 +61,7 @@ double f(double x) {
 //     return sum / values.size();
 // }
 
-// double pairwiseSum(const std::vector<double>& values) {
+// double pairwiseSum(const vector<double>& values) {
 //     // Recursively add pairs of numbers together
 //     if (values.size() == 1) {
 //         return values[0];
@@ -69,18 +81,21 @@ double f(double x) {
 
 void* integrate(void* params) {
     struct parameters* vars = (struct parameters*) params;
-    double thread_result = 0;
+    // double thread_result = 0;
 
     // Calculate the integral for this thread
     for (long i = vars->thread_id; i < vars->N; i += vars->T) {
-        thread_result += vars->w[i] * f(vars->x[i]);
-        // vars->result[i] = vars->w[i] * f(vars->x[i]);
+        // pthread_mutex_lock(&(vars->mutex));
+        (*(vars->result))[i] = vars->w[i] * f(vars->x[i]);
+        // cout << (*(vars->result))[i] << flush;
+        // pthread_mutex_unlock(&(vars->mutex));
+        // thread_result += vars->w[i] * f(vars->x[i]);
     }
 
     // // Add this thread's result to the global result
-    pthread_mutex_lock(&(vars->mutex));
-    *(vars->result) += thread_result;
-    pthread_mutex_unlock(&(vars->mutex));
+    // pthread_mutex_lock(&(vars->mutex));
+    // *(vars->result) += thread_result;
+    // pthread_mutex_unlock(&(vars->mutex));
 
     return 0;
 }
@@ -102,9 +117,9 @@ int main(int num_args, char** args) {
     int num_samples = stoi(args[3]);
     int num_threads = stoi(args[4]);
 
-    // vector<double> result;
-    // result.resize(num_samples);
-    double result;     // Result of the integral calculation
+    vector<double>* result = new vector<double>;
+    result->resize(num_samples);
+    // double result;     // Result of the integral calculation
     // double x[num_samples];
     vector<double> x;
     x.resize(num_samples);
@@ -128,7 +143,7 @@ int main(int num_args, char** args) {
     pthread_t threads[num_threads];
     parameters param_list[num_threads];
     for (long i = 0; i < num_threads; i++) {
-        param_list[i] = {i, num_samples, num_threads, mutex, x, w, &result};
+        param_list[i] = {i, num_samples, num_threads, mutex, x, w, result};
         pthread_create(&threads[i], NULL, integrate, (void*) &(param_list[i]));
     }
 
@@ -137,7 +152,8 @@ int main(int num_args, char** args) {
         pthread_join(threads[i], NULL);
     }
 
-    // double final_result = pairwiseSum(result)/num_samples;
+    double final_result = sum(*result);
+    // double final_result = pairwiseSum(result);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);
@@ -145,9 +161,14 @@ int main(int num_args, char** args) {
     std::cout << "Duration: " << duration.count() << " milliseconds" << std::endl;
 
     // Print the result
-    cout << "Result: " << fixed << setprecision(18) << result << endl;
+    // for (int i=0; i <10; i++){
+    //     cout << (*result)[i] << endl;
+    // }
+    cout << "Result: " << fixed << setprecision(18) << final_result << endl;
+    // cout << "Result: " << fixed << setprecision(18) << result << endl;
 
     pthread_mutex_destroy(&mutex);
+    delete result;
 
     return 0;
 }

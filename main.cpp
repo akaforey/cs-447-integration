@@ -20,7 +20,6 @@ integral_0^1 sin(x)/x dx | 18 digits
 = 0.946083070367183015
 */
 
-// TODO Time calculation
 // TODO Optimize for speed
 
 
@@ -49,35 +48,35 @@ double sum(vector<double>& values){
     return sum;
 }
 
-// double average(const vector<double>& values) {
-//     double sum = 0.0;
-//     double error = 0.0;
-//     for (double value : values) {
-//         double y = value - error;
-//         double temp = sum + y;
-//         error = (temp - sum) - y;
-//         sum = temp;
-//     }
-//     return sum / values.size();
-// }
+double ksum(const vector<double>& values) {
+    double sum = 0.0;
+    double error = 0.0;
+    for (double value : values) {
+        double y = value - error;
+        double temp = sum + y;
+        error = (temp - sum) - y;
+        sum = temp;
+    }
+    return sum;
+}
 
-// double pairwiseSum(const vector<double>& values) {
-//     // Recursively add pairs of numbers together
-//     if (values.size() == 1) {
-//         return values[0];
-//     }
-//     if (values.size() == 2) {
-//         return values[0] + values[1];
-//     }
-//     std::vector<double> newValues;
-//     for (int i = 0; i < values.size() - 1; i += 2) {
-//         newValues.push_back(values[i] + values[i + 1]);
-//     }
-//     if (values.size() % 2 != 0) {
-//         newValues.push_back(values.back());
-//     }
-//     return pairwiseSum(newValues);
-// }
+double pairwiseSum(vector<double>& values) {
+    // Recursively add pairs of numbers together
+    if (values.size() == 1) {
+        return values[0];
+    }
+    if (values.size() == 2) {
+        return values[0] + values[1];
+    }
+    std::vector<double> newValues;
+    for (ulong i = 0; i < values.size() - 1; i += 2) {
+        newValues.push_back(values[i] + values[i + 1]);
+    }
+    if (values.size() % 2 != 0) {
+        newValues.push_back(values.back());
+    }
+    return pairwiseSum(newValues);
+}
 
 void* integrate(void* params) {
     struct parameters* vars = (struct parameters*) params;
@@ -117,15 +116,9 @@ int main(int num_args, char** args) {
     int num_samples = stoi(args[3]);
     int num_threads = stoi(args[4]);
 
-    vector<double>* result = new vector<double>;
-    result->resize(num_samples);
-    // double result;     // Result of the integral calculation
-    // double x[num_samples];
-    vector<double> x;
-    x.resize(num_samples);
-    // double w[num_samples];
-    vector<double> w;
-    w.resize(num_samples);
+    vector<double>* result = new vector<double>(num_samples);    // Result of the integral calculation
+    vector<double> x(num_samples);
+    vector<double> w(num_samples);
 
     // Initialize the mutex
     pthread_mutex_t mutex; // Mutex to protect the shared result variable
@@ -152,8 +145,9 @@ int main(int num_args, char** args) {
         pthread_join(threads[i], NULL);
     }
 
-    double final_result = sum(*result);
-    // double final_result = pairwiseSum(result);
+    // double final_result = sum(*result);
+    double final_result = ksum(*result);
+    // double final_result = pairwiseSum(*result);
 
     auto stop = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start);

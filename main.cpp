@@ -4,6 +4,7 @@
 #include <cmath>
 #include <vector>
 #include <chrono>
+#include <immintrin.h>
 
 using namespace std;
 
@@ -40,43 +41,58 @@ double f(double x) {
     return sin(x)/x;
 }
 
-double sum(vector<double>& values){
-    double sum = 0;
-    for (ulong i=0; i < values.size(); i++){
-        sum += values[i];
-    }
-    return sum;
-}
+// double sum(vector<double>& values){
+//     double sum = 0;
+//     for (ulong i=0; i < values.size(); i++){
+//         sum += values[i];
+//     }
+//     return sum;
+// }
+
+// double ksum(const vector<double>& values) {
+//     double sum = 0.0;
+//     double error = 0.0;
+//     for (double value : values) {
+//         double y = value - error;
+//         double temp = sum + y;
+//         error = (temp - sum) - y;
+//         sum = temp;
+//     }
+//     return sum;
+// }
 
 double ksum(const vector<double>& values) {
-    double sum = 0.0;
-    double error = 0.0;
-    for (double value : values) {
-        double y = value - error;
-        double temp = sum + y;
-        error = (temp - sum) - y;
+    __m256d sum = _mm256_setzero_pd();
+    __m256d error = _mm256_setzero_pd();
+    for (ulong i = 0; i < values.size(); i += 4) {
+        __m256d value = _mm256_loadu_pd(&values[i]);
+        __m256d y = _mm256_sub_pd(value, error);
+        __m256d temp = _mm256_add_pd(sum, y);
+        error = _mm256_sub_pd(_mm256_sub_pd(temp, sum), y);
         sum = temp;
     }
-    return sum;
+    __m256d sum2 = _mm256_hadd_pd(sum, sum);
+    __m128d sum3 = _mm_add_pd(_mm256_extractf128_pd(sum2, 1), _mm256_castpd256_pd128(sum2));
+    return _mm_cvtsd_f64(sum3);
 }
 
-double pairwiseSum(vector<double>& values) {
-    // Recursively add pairs of numbers together
-    if (values.size() == 1) {
-        return values[0];
-    }
-    if (values.size() == 2) {
-        return values[0] + values[1];
-    }
-    vector<double> newValues;
-    for (ulong i = 0; i < values.size() - 1; i += 2) {
-        newValues.push_back(values[i] + values[i + 1]);
-    }
-    if (values.size() % 2 != 0) {
-        newValues.push_back(values.back());
-    }
-    return pairwiseSum(newValues);
-}
+// double pairwiseSum(vector<double>& values) {
+//     // Recursively add pairs of numbers together
+//     if (values.size() == 1) {
+//         return values[0];
+//     }
+//     if (values.size() == 2) {
+//         return values[0] + values[1];
+//     }
+//     vector<double> newValues;
+//     for (ulong i = 0; i < values.size() - 1; i += 2) {
+//         newValues.push_back(values[i] + values[i + 1]);
+//     }
+//     if (values.size() % 2 != 0) {
+//         newValues.push_back(values.back());
+//     }
+//     return pairwiseSum(newValues);
+// }
 
 void* integrate(void* params) {
     struct parameters* vars = (struct parameters*) params;

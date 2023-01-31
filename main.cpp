@@ -5,6 +5,7 @@
 #include <vector>
 #include <chrono>
 #include <immintrin.h>
+#include <stdlib.h>
 
 using namespace std;
 
@@ -33,6 +34,8 @@ struct parameters{
     double x;
     double w;
     double* global_res;
+    double a;
+    double b;
 };
 
 
@@ -47,6 +50,26 @@ double f(double x) {
 //         sum += values[i];
 //     }
 //     return sum;
+// }
+
+
+
+// double pairwiseSum(vector<double>& values) {
+//     // Recursively add pairs of numbers together
+//     if (values.size() == 1) {
+//         return values[0];
+//     }
+//     if (values.size() == 2) {
+//         return values[0] + values[1];
+//     }
+//     vector<double> newValues;
+//     for (ulong i = 0; i < values.size() - 1; i += 2) {
+//         newValues.push_back(values[i] + values[i + 1]);
+//     }
+//     if (values.size() % 2 != 0) {
+//         newValues.push_back(values.back());
+//     }
+//     return pairwiseSum(newValues);
 // }
 
 // double ksum(const vector<double>& values) {
@@ -76,39 +99,48 @@ double ksum(const vector<double>& values) {
     return _mm_cvtsd_f64(sum3);
 }
 
-// double pairwiseSum(vector<double>& values) {
-//     // Recursively add pairs of numbers together
-//     if (values.size() == 1) {
-//         return values[0];
-//     }
-//     if (values.size() == 2) {
-//         return values[0] + values[1];
-//     }
-//     vector<double> newValues;
-//     for (ulong i = 0; i < values.size() - 1; i += 2) {
-//         newValues.push_back(values[i] + values[i + 1]);
-//     }
-//     if (values.size() % 2 != 0) {
-//         newValues.push_back(values.back());
-//     }
-//     return pairwiseSum(newValues);
-// }
-
 void* integrate(void* params) {
     struct parameters* vars = (struct parameters*) params;
-    vector<double> res(vars->N/vars->T+1);
-    // Calculate the integral for this thread
-    for (long i = vars->thread_id; i < vars->N; i += vars->T) {
-        res.push_back(vars->w * f((vars->x) * (i + 0.5)));
+    // srand((uint) vars->thread_id + 123);
+    // uint seed = (uint) vars->thread_id + 123;
+    // cout << ((double)rand_r(&seed)/RAND_MAX)*(vars->b - vars->a) + vars->a << endl;
+    __m256d w = _mm256_set1_pd(vars->w);
+    __m256d x = _mm256_set1_pd(vars->x);
+    __m256d h = _mm256_set1_pd( 0.5);
+    __m256d sum = _mm256_setzero_pd();
+    for (int i = 4*(vars->thread_id); i < vars->N; i += 4*(vars->T)) {
+        __m256d xi = _mm256_set_pd(i + 3, i + 2, i + 1, i);
+        __m256d xih = _mm256_add_pd(xi, h);
+        __m256d xihx = _mm256_mul_pd(xih, x);
+        __m256d fi = _mm256_set_pd(f(xihx[3]), f(xihx[2]), f(xihx[1]), f(xihx[0]));
+        __m256d temp = _mm256_mul_pd(w, fi);
+        sum = _mm256_add_pd(sum, temp);
     }
-    // Add this thread's result to the global result
-    double thread_result = ksum(res);
+    __m256d sum2 = _mm256_hadd_pd(sum, sum);
+    __m128d sum3 = _mm_add_pd(_mm256_extractf128_pd(sum2, 1), _mm256_castpd256_pd128(sum2));
+    double thread_result = _mm_cvtsd_f64(sum3);
     pthread_mutex_lock(&(vars->mutex));
     *(vars->global_res) += thread_result;
     pthread_mutex_unlock(&(vars->mutex));
 
     return 0;
 }
+
+// void* integrate(void* params) {
+//     struct parameters* vars = (struct parameters*) params;
+//     vector<double> res(vars->N/vars->T+1);
+//     // Calculate the integral for this thread
+//     for (long i = vars->thread_id; i < vars->N; i += vars->T) {
+//         res.push_back(vars->w * f((vars->x) * (i + 0.5)));
+//     }
+//     // Add this thread's result to the global result
+//     double thread_result = ksum(res);
+//     pthread_mutex_lock(&(vars->mutex));
+//     *(vars->global_res) += thread_result;
+//     pthread_mutex_unlock(&(vars->mutex));
+
+//     return 0;
+// }
 
 int main(int num_args, char** args) {
 
@@ -149,7 +181,7 @@ int main(int num_args, char** args) {
     parameters param_list[num_threads];
     double global_res = 0;
     for (long i = 0; i < num_threads; i++) {
-        param_list[i] = {i, num_samples, num_threads, mutex, x, w, &global_res};
+        param_list[i] = {i, num_samples, num_threads, mutex, x, w, &global_res, a, b};
         pthread_create(&threads[i], NULL, integrate, (void*) &(param_list[i]));
     }
 

@@ -29,9 +29,8 @@ struct parameters{
     int T; // Number of threads
     pthread_mutex_t mutex; // Mutex to protect the shared result variable
     // Gaussian quadrature weights and points
-    vector<double> x;
-    vector<double> w;
-    vector<double>* result;
+    double x;
+    double w;
     double* global_res;
 };
 
@@ -81,21 +80,15 @@ double pairwiseSum(vector<double>& values) {
 
 void* integrate(void* params) {
     struct parameters* vars = (struct parameters*) params;
-    // double thread_result = 0;
     vector<double> res(vars->N/vars->T+1);
     // Calculate the integral for this thread
     for (long i = vars->thread_id; i < vars->N; i += vars->T) {
-        // pthread_mutex_lock(&(vars->mutex));
-        // (*(vars->result))[i] = vars->w[i] * f(vars->x[i]);
-        res.push_back(vars->w[i] * f(vars->x[i]));
-        // cout << (*(vars->result))[i] << flush;
-        // pthread_mutex_unlock(&(vars->mutex));
-        // thread_result += vars->w[i] * f(vars->x[i]);
+        res.push_back(vars->w * f((vars->x) * (i + 0.5)));
     }
-
-    // // Add this thread's result to the global result
+    // Add this thread's result to the global result
+    double thread_result = ksum(res);
     pthread_mutex_lock(&(vars->mutex));
-    *(vars->global_res) += ksum(res);
+    *(vars->global_res) += thread_result;
     pthread_mutex_unlock(&(vars->mutex));
 
     return 0;
@@ -118,9 +111,9 @@ int main(int num_args, char** args) {
     int num_samples = stoi(args[3]);
     int num_threads = stoi(args[4]);
 
-    vector<double>* result = new vector<double>(num_samples);    // Result of the integral calculation
-    vector<double> x(num_samples);
-    vector<double> w(num_samples);
+    // vector<double>* result = new vector<double>(num_samples);    // Result of the integral calculation
+    double x(num_samples);
+    double w;
 
     // Initialize the mutex
     pthread_mutex_t mutex; // Mutex to protect the shared result variable
@@ -129,17 +122,18 @@ int main(int num_args, char** args) {
 
     // Initialize the Gaussian quadrature weights and points
     // TODO: Is this the correct method? wiki looks more complicated
-    for (int i = 0; i < num_samples; i++) {
-        x[i] = a + (b - a) * (i + 0.5) / num_samples;
-        w[i] = (b - a) / num_samples;
-    }
+    w = (b - a) / num_samples;
+    x = a + (b - a) / num_samples;
+    // for (int i = 0; i < num_samples; i++) {
+    //     x[i] = a + (b - a) * (i + 0.5) / num_samples;
+    // }
 
     // Create the threads
     pthread_t threads[num_threads];
     parameters param_list[num_threads];
     double global_res = 0;
     for (long i = 0; i < num_threads; i++) {
-        param_list[i] = {i, num_samples, num_threads, mutex, x, w, result, &global_res};
+        param_list[i] = {i, num_samples, num_threads, mutex, x, w, &global_res};
         pthread_create(&threads[i], NULL, integrate, (void*) &(param_list[i]));
     }
 
@@ -160,14 +154,7 @@ int main(int num_args, char** args) {
         << "Result: " << fixed << setprecision(18) << global_res << endl;
     // cout << global_res << endl;
 
-    // Print the result
-    // for (int i=0; i <10; i++){
-    //     cout << (*result)[i] << endl;
-    // }
-    // cout << "Result: " << fixed << setprecision(18) << result << endl;
-
     pthread_mutex_destroy(&mutex);
-    delete result;
 
     return 0;
 }

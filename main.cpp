@@ -32,8 +32,7 @@ struct parameters{
     long thread_id;
     ulong* N; // Number of samples
     int T; // Number of threads
-    pthread_mutex_t mutex; // Mutex to protect the shared result variable
-    // Gaussian quadrature weights and points
+    pthread_mutex_t mutex;
     double x;
     double w;
     double* global_res;
@@ -44,6 +43,8 @@ struct parameters{
 
 
 bool running;
+pthread_mutex_t mutex;
+pthread_mutexattr_t myMutexAttr;
 
 // Function to be integrated
 double f(double x) {
@@ -51,33 +52,6 @@ double f(double x) {
     return sin(x)/x;
 }
 
-// double sum(vector<double>& values){
-//     double sum = 0;
-//     for (ulong i=0; i < values.size(); i++){
-//         sum += values[i];
-//     }
-//     return sum;
-// }
-
-
-
-// double pairwiseSum(vector<double>& values) {
-//     // Recursively add pairs of numbers together
-//     if (values.size() == 1) {
-//         return values[0];
-//     }
-//     if (values.size() == 2) {
-//         return values[0] + values[1];
-//     }
-//     vector<double> newValues;
-//     for (ulong i = 0; i < values.size() - 1; i += 2) {
-//         newValues.push_back(values[i] + values[i + 1]);
-//     }
-//     if (values.size() % 2 != 0) {
-//         newValues.push_back(values.back());
-//     }
-//     return pairwiseSum(newValues);
-// }
 
 // double ksum(const vector<double>& values) {
 //     double sum = 0.0;
@@ -171,9 +145,9 @@ void* integrate(void* params) {
         thread_result = temp;
     }
     // Add this thread's result to the global result
-    pthread_mutex_lock(&(vars->mutex));
+    pthread_mutex_lock(&(mutex));
     *(vars->global_res) += thread_result;
-    pthread_mutex_unlock(&(vars->mutex));
+    pthread_mutex_unlock(&(mutex));
 
     return 0;
 }
@@ -193,10 +167,10 @@ void* timed_integrate(void* params) {
         error = (temp - thread_result) - y;
         thread_result = temp;
     }
-    pthread_mutex_lock(&(vars->mutex));
+    pthread_mutex_lock(&(mutex));
     *(vars->N) += thread_samples;
     *(vars->global_res) += thread_result;
-    pthread_mutex_unlock(&(vars->mutex));
+    pthread_mutex_unlock(&(mutex));
     // cout << vars->thread_id << endl;
     // cout << thread_result/thread_samples*(vars->b - vars->a) << endl;
 
@@ -236,8 +210,7 @@ int main(int num_args, char** args) {
     double w;
 
     // Initialize the mutex
-    pthread_mutex_t mutex;
-    pthread_mutexattr_t myMutexAttr;
+
     pthread_mutexattr_init(&myMutexAttr);
     pthread_mutexattr_setpshared(&myMutexAttr, PTHREAD_PROCESS_SHARED);
     pthread_mutex_init(&mutex, &myMutexAttr);
@@ -265,7 +238,8 @@ int main(int num_args, char** args) {
         }
     }
     else {
-        for (long i = 0; i < num_threads; i++) {
+        //  timed
+        for (int i = 0; i < num_threads; i++) {
             param_list[i] = {i, &total_samples, num_threads, mutex, x, w, &global_res, a, b, &run};
             pthread_create(&threads[i], NULL, timed_integrate, (void*) &(param_list[i]));
         }

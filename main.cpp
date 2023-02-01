@@ -43,15 +43,12 @@ pthread_mutexattr_t myMutexAttr;
 
 // Function to be integrated
 double f(double x) {
-    // return 1;
     return sin(x)/x;
 }
 
 
 void* integrate(void* params) {
     struct parameters* vars = (struct parameters*) params;
-    // uint seed = (uint) vars->thread_id + 123;
-    // __m256d w = _mm256_set1_pd(vars->w);
     __m256d range = _mm256_set1_pd((vars->b - vars->a) / (double)(*vars->N));
     __m256d h = _mm256_set_pd(3.5, 2.5, 1.5, 0.5);
     __m256d a = _mm256_set1_pd(vars->a);
@@ -104,18 +101,26 @@ void* integrate(void* params) {
 void* timed_integrate(void* params) {
     struct parameters* vars = (struct parameters*) params;
     uint seed = (uint) vars->thread_id + 123;
-    // Calculate the integral for this thread
-    double thread_result = 0.0;
-    double error = 0.0;
-    double scale = (vars->b - vars->a)/((double)RAND_MAX);
+    __m256d range = _mm256_set1_pd((vars->b - vars->a) / (double)(RAND_MAX));
+    __m256d a = _mm256_set1_pd(vars->a);
+    __m256d sum = _mm256_setzero_pd();
+    __m256d error = _mm256_setzero_pd();
     ulong thread_samples = 0;
     while (running) {
-        thread_samples+=1;
-        double y = f(scale * (double)rand_r(&seed) + vars->a) - error;
-        double temp = thread_result + y;
-        error = (temp - thread_result) - y;
-        thread_result = temp;
+        thread_samples+=4;
+        __m256d x = _mm256_set_pd((double)rand_r(&seed), (double)rand_r(&seed), (double)rand_r(&seed), (double)rand_r(&seed));
+        __m256d xr = _mm256_mul_pd(x, range);
+        __m256d xra = _mm256_add_pd(xr, a);
+        __m256d fxra = _mm256_set_pd(f(xra[3]), f(xra[2]), f(xra[1]), f(xra[0]));
+        __m256d y = _mm256_sub_pd(fxra, error);
+        __m256d temp = _mm256_add_pd(sum, y);
+        error = _mm256_sub_pd(_mm256_sub_pd(temp, sum), y);
+        sum = temp;
+
     }
+    __m256d sum2 = _mm256_hadd_pd(sum, sum);
+    __m128d sum3 = _mm_add_pd(_mm256_extractf128_pd(sum2, 1), _mm256_castpd256_pd128(sum2));
+    double thread_result = _mm_cvtsd_f64(sum3);
     pthread_mutex_lock(&(mutex));
     *(vars->N) += thread_samples;
     *(vars->global_res) += thread_result;
@@ -123,6 +128,30 @@ void* timed_integrate(void* params) {
 
     return 0;
 }
+
+
+// void* timed_integrate(void* params) {
+//     struct parameters* vars = (struct parameters*) params;
+//     uint seed = (uint) vars->thread_id + 123;
+//     // Calculate the integral for this thread
+//     double thread_result = 0.0;
+//     double error = 0.0;
+//     double scale = (vars->b - vars->a)/((double)RAND_MAX);
+//     ulong thread_samples = 0;
+//     while (running) {
+//         thread_samples+=1;
+//         double y = f(scale * (double)rand_r(&seed) + vars->a) - error;
+//         double temp = thread_result + y;
+//         error = (temp - thread_result) - y;
+//         thread_result = temp;
+//     }
+//     pthread_mutex_lock(&(mutex));
+//     *(vars->N) += thread_samples;
+//     *(vars->global_res) += thread_result;
+//     pthread_mutex_unlock(&(mutex));
+
+//     return 0;
+// }
 
 
 int main(int num_args, char** args) {
@@ -190,6 +219,7 @@ int main(int num_args, char** args) {
 
     if (timed){
         global_res *= (b-a)/total_samples;
+        // cout << total_samples << endl;
     }
 
     auto stop = std::chrono::high_resolution_clock::now();
@@ -199,11 +229,11 @@ int main(int num_args, char** args) {
     //     << "Duration: " << duration.count() << " milliseconds, "
     //     << "Result: " << fixed << setprecision(18) << global_res << endl;
 
-    cout << num_threads << ","
-        << duration.count() << ","
-        << fixed << setprecision(18) << global_res << endl;
+    // cout << num_threads << ","
+    //     << duration.count() << ","
+    //     << fixed << setprecision(18) << global_res << endl;
 
-    // cout << fixed << setprecision(18) << global_res << endl;
+    cout << fixed << setprecision(18) << global_res << endl;
 
     pthread_mutexattr_destroy(&myMutexAttr);
     pthread_mutex_destroy(&mutex);
